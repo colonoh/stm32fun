@@ -87,14 +87,7 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   /* USER CODE BEGIN 2 */
-  int i = 0;
-  i += 1;
-  i += 1;
-  i += 1;
-  i += 1;
-  i += 1;
-  i += 1;
-  i += 1;
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -102,7 +95,8 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-
+    HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+    HAL_Delay(1000);
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
