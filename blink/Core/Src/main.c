@@ -21,7 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include <stdio.h>
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -92,11 +92,18 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  uint32_t now = 0, last_blink = 0;
   while (1)
   {
+      now = HAL_GetTick();
+
+      if (now - last_blink >= 500) {
+          HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+
+          last_blink = now;
+      }
     /* USER CODE END WHILE */
-    HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
-    HAL_Delay(1000);
+
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
