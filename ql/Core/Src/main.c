@@ -49,6 +49,7 @@
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+void delay(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -66,6 +67,12 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
+  void delay(void) {
+      int counter = 0;
+      while(counter < 1000000) {
+          counter += 1;
+      }
+  }
 
   /* USER CODE END 1 */
 
@@ -93,18 +100,18 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  uint32_t now = 0, last_blink = 0;
-  volatile unsigned long *p_int = (volatile unsigned long *)0x50000014UL; // address of GPIOA_ODR
-
+//  uint32_t now = 0, last_blink = 0;
   while (1)
   {
-      now = HAL_GetTick();
-      if (now - last_blink >= 1000) {
+//      now = HAL_GetTick();
+//      if (now - last_blink >= 1000) {
 //          HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
-          *p_int |= OD5;
-
-          last_blink = now;
-      }
+//          last_blink = now;
+//      }
+      HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+      delay();
+      HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+      delay();
 
     /* USER CODE END WHILE */
 
