@@ -7552,10 +7552,12 @@ static void MX_TIM2_Init(void);
 /* USER CODE BEGIN 0 */
 void start_audio_playback(const uint32_t *clip, uint32_t length)
 {
+  printf("Playing!\n\r");
   current_clip = clip;
   current_clip_length = length;
   sample_index = 0;
   playing = 1;
+  BSP_LED_On(LED_GREEN);
 }
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
@@ -7568,6 +7570,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     {
       sample_index = 0;
       playing = 0;  // Stop playback
+      BSP_LED_Off(LED_GREEN);
     }
   }
 }
@@ -7632,7 +7635,7 @@ int main(void)
   printf("Welcome to STM32 world !\n\r");
 
   /* -- Sample board code to switch on leds ---- */
-  BSP_LED_On(LED_GREEN);
+
 
   /* USER CODE END BSP */
 
@@ -7647,15 +7650,14 @@ int main(void)
     {
       /* Update button state */
       BspButtonState = BUTTON_RELEASED;
-      /* -- Sample board code to toggle leds ---- */
-      BSP_LED_Toggle(LED_GREEN);
-      printf("Toggling!\n\r");
-      if(i == 0) {
-          start_audio_playback(audio_clip_1, audio_clip_1_length);
-          i += 1;
-      } else if(i == 1) {
-          start_audio_playback(audio_clip_2, audio_clip_2_length);
-          i = 0;
+      if(!playing) {
+          if(i == 0) {
+              start_audio_playback(audio_clip_1, audio_clip_1_length);
+              i += 1;
+          } else if(i == 1) {
+              start_audio_playback(audio_clip_2, audio_clip_2_length);
+              i = 0;
+          }
       }
 
 
