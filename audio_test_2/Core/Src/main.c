@@ -52,7 +52,7 @@ TIM_HandleTypeDef htim2;
 /* USER CODE BEGIN PV */
 // Sample rate: 16000 Hz
 // Number of samples: 40124
-const uint32_t audio_clip_1[] = {
+const uint16_t audio_clip_1[] = {
   2055,   2055,   2055,   2055,   2055,   2039,   2055,   2039,
   2055,   2055,   2055,   2039,   2055,   2039,   2055,   2055,
   2039,   2055,   2055,   2055,   2055,   2055,   2039,   2055,
@@ -5071,7 +5071,7 @@ const uint32_t audio_clip_1[] = {
   2039,   2055,   2039,   2055,
 };
 
-const uint32_t audio_clip_1_length = sizeof(audio_clip_1) / sizeof(audio_clip_1[0]);
+const uint16_t audio_clip_1_length = sizeof(audio_clip_1) / sizeof(audio_clip_1[0]);
 
 
 /* USER CODE END PV */
