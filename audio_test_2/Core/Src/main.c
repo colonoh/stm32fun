@@ -42,7 +42,6 @@
 /* Private variables ---------------------------------------------------------*/
 
 COM_InitTypeDef BspCOMInit;
-__IO uint32_t BspButtonState = BUTTON_RELEASED;
 
 DAC_HandleTypeDef hdac1;
 DMA_HandleTypeDef hdma_dac1_ch1;
@@ -5163,20 +5162,15 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+      // Only go to sleep when not playing audio
+      if (HAL_DAC_GetState(&hdac1) != HAL_DAC_STATE_BUSY)
+      {
+          // Clear WFI wakeup sources (if needed)
+          __HAL_PWR_CLEAR_FLAG(PWR_FLAG_WU);
 
-    /* -- Sample board code for User push-button in interrupt mode ---- */
-    if (BspButtonState == BUTTON_PRESSED)
-    {
-      /* Update button state */
-      BspButtonState = BUTTON_RELEASED;
-     HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t*)audio_clip_1, audio_clip_1_length, DAC_ALIGN_12B_R);
-     BSP_LED_On(LED_GREEN);
-
-
-
-
-      /* ..... Perform your action ..... */
-    }
+          // Enter sleep mode, wait for interrupt
+          HAL_PWR_EnterSLEEPMode(PWR_MAINREGULATOR_ON, PWR_SLEEPENTRY_WFI);
+      }
 
     /* USER CODE END WHILE */
 
@@ -5372,7 +5366,8 @@ void BSP_PB_Callback(Button_TypeDef Button)
 {
   if (Button == BUTTON_USER)
   {
-    BspButtonState = BUTTON_PRESSED;
+      HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t*)audio_clip_1, audio_clip_1_length, DAC_ALIGN_12B_R);
+      BSP_LED_On(LED_GREEN);
   }
 }
 
