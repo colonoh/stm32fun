@@ -61,6 +61,27 @@ static void MX_SPI1_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+// Dump hex to serial console
+void dump_hex(char *header, uint32_t start, uint8_t *buf, uint32_t len) {
+    uint32_t i = 0;
+
+    W25_DBG("%s\n", header);
+
+    for (i = 0; i < len; ++i) {
+
+        if (i % 16 == 0) {
+            printf("0x%08lx: ", start);
+        }
+
+        printf("%02x ", buf[i]);
+
+        if ((i + 1) % 16 == 0) {
+            printf("\r\n");
+        }
+
+        ++start;
+    }
+}
 
 /* USER CODE END 0 */
 
@@ -117,7 +138,7 @@ int main(void)
   /* USER CODE BEGIN BSP */
 
   /* -- Sample board code to send message over COM1 port ---- */
-  printf("Welcome to STM32 world !\r\n");
+  printf("\r\n\r\nWelcome to STM32 world !\r\n");
 
   /* USER CODE END BSP */
 
@@ -145,6 +166,31 @@ int main(void)
       /* -- Sample board code to toggle leds ---- */
       BSP_LED_Toggle(LED_GREEN);
       /* ..... Perform your action ..... */
+      W25_DBG("Reading first page");
+        if (w25qxx_read(&w25qxx, 0, (uint8_t *)&buf, 256) == W25QXX_Ok) {
+            //DBG("  - sum = %lu", get_sum(buf, 256));
+            dump_hex("First page at start", 0, &buf, 256);
+        }
+
+        W25_DBG("Erasing first page");
+        if (w25qxx_erase(&w25qxx, 0, 256) == W25QXX_Ok) {
+            W25_DBG("Reading first page");
+                    if (w25qxx_read(&w25qxx, 0, (uint8_t *)&buf, 256) == W25QXX_Ok) {
+                        //DBG("  - sum = %lu", get_sum(buf, 256));
+                      dump_hex("After erase", 0, &buf, 256);
+                    }
+        }
+
+        // Create a well known pattern
+        for (int i = 0; i < 256; ++i) buf[i] = i;
+        W25_DBG("Writing first page");
+        if (w25qxx_write(&w25qxx, 0, (uint8_t *)&buf, 256) == W25QXX_Ok) {
+            W25_DBG("Reading first page");
+                    if (w25qxx_read(&w25qxx, 0, (uint8_t *)&buf, 256) == W25QXX_Ok) {
+                        //DBG("  - sum = %lu", get_sum(buf, 256));
+                        dump_hex("After write", 0, &buf, 256);
+                    }
+        }
     }
 
     /* USER CODE END WHILE */
