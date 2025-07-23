@@ -21,7 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "w25qxx.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -47,7 +47,8 @@ __IO uint32_t BspButtonState = BUTTON_RELEASED;
 SPI_HandleTypeDef hspi1;
 
 /* USER CODE BEGIN PV */
-
+W25QXX_HandleTypeDef w25qxx;
+uint8_t buf[256] = {0}; // Buffer for playing with w25qxx
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -80,7 +81,6 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -117,15 +117,23 @@ int main(void)
   /* USER CODE BEGIN BSP */
 
   /* -- Sample board code to send message over COM1 port ---- */
-  printf("Welcome to STM32 world !\n\r");
-
-  /* -- Sample board code to switch on leds ---- */
-  BSP_LED_On(LED_GREEN);
+  printf("Welcome to STM32 world !\r\n");
 
   /* USER CODE END BSP */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+
+  W25_DBG("Attempting to initialize W25QXX");
+  if (w25qxx_init(&w25qxx, &hspi1, SPI1_CS_GPIO_Port, SPI1_CS_Pin) == W25QXX_Ok) {
+      W25_DBG("W25QXX successfully initialized");
+      W25_DBG("Manufacturer       = 0x%2x", w25qxx.manufacturer_id);
+      W25_DBG("Device             = 0x%4x", w25qxx.device_id);
+      W25_DBG("Block size         = 0x%04x (%lu)", w25qxx.block_size, w25qxx.block_size);
+      W25_DBG("Block count        = 0x%04x (%lu)", w25qxx.block_count, w25qxx.block_count);
+      W25_DBG("Total size (in kB) = 0x%04x (%lu)", (w25qxx.block_count * w25qxx.block_size) / 1024, (w25qxx.block_count * w25qxx.block_size) / 1024);
+  }
+
   while (1)
   {
 
