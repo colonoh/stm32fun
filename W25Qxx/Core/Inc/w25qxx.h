@@ -18,9 +18,9 @@
 #ifndef W25QXX_H_
 #define W25QXX_H_
 
-#ifdef DEBUGxxx
+#ifdef DEBUG
 #define W25_DBG(...) printf(__VA_ARGS__);\
-                     printf("\n")
+                     printf("\r\n")
 #else
 #define W25_DBG(...)
 #endif
