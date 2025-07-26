@@ -49,6 +49,14 @@ SPI_HandleTypeDef hspi1;
 /* USER CODE BEGIN PV */
 W25QXX_HandleTypeDef w25qxx;
 uint8_t buf[256] = {0}; // Buffer for playing with w25qxx
+
+const uint8_t audio_data[] = {
+  0x49, 0x4E, 0x46, 0x4F, 0x49, 0x53, 0x46, 0x54, 0x0D, 0x00, 0x00, 0x00,
+// truncated
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04,
+};
+const uint32_t audio_data_size = 140578;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -166,31 +174,18 @@ int main(void)
       /* -- Sample board code to toggle leds ---- */
       BSP_LED_Toggle(LED_GREEN);
       /* ..... Perform your action ..... */
-      W25_DBG("Reading first page");
-        if (w25qxx_read(&w25qxx, 0, (uint8_t *)&buf, 256) == W25QXX_Ok) {
-            //DBG("  - sum = %lu", get_sum(buf, 256));
-            dump_hex("First page at start", 0, &buf, 256);
-        }
+        w25qxx_erase(&w25qxx, 0, audio_data_size);
+        w25qxx_write(&w25qxx, 0, audio_data, audio_data_size);
 
-        W25_DBG("Erasing first page");
-        if (w25qxx_erase(&w25qxx, 0, 256) == W25QXX_Ok) {
-            W25_DBG("Reading first page");
-                    if (w25qxx_read(&w25qxx, 0, (uint8_t *)&buf, 256) == W25QXX_Ok) {
-                        //DBG("  - sum = %lu", get_sum(buf, 256));
-                      dump_hex("After erase", 0, &buf, 256);
-                    }
-        }
-
-        // Create a well known pattern
-        for (int i = 0; i < 256; ++i) buf[i] = i;
-        W25_DBG("Writing first page");
-        if (w25qxx_write(&w25qxx, 0, (uint8_t *)&buf, 256) == W25QXX_Ok) {
-            W25_DBG("Reading first page");
-                    if (w25qxx_read(&w25qxx, 0, (uint8_t *)&buf, 256) == W25QXX_Ok) {
-                        //DBG("  - sum = %lu", get_sum(buf, 256));
-                        dump_hex("After write", 0, &buf, 256);
-                    }
-        }
+        W25_DBG("Reading first page");
+          if (w25qxx_read(&w25qxx, 0, (uint8_t *)&buf, 256) == W25QXX_Ok) {
+              //DBG("  - sum = %lu", get_sum(buf, 256));
+              dump_hex("First page at start", 0, &buf, 256);
+          }
+          if (w25qxx_read(&w25qxx, 0x00022500, (uint8_t *)&buf, 256) == W25QXX_Ok) {
+              //DBG("  - sum = %lu", get_sum(buf, 256));
+              dump_hex("Last page at start", 0x00022500, &buf, 256);
+          }
     }
 
     /* USER CODE END WHILE */
