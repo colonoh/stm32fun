@@ -226,7 +226,7 @@ W25QXX_result_t w25qxx_init(W25QXX_HandleTypeDef *w25qxx, SPI_HandleTypeDef *hsp
 
 W25QXX_result_t w25qxx_read(W25QXX_HandleTypeDef *w25qxx, uint32_t address, uint8_t *buf, uint32_t len) {
 
-    W25_DBG("w25qxx_read - address: 0x%08lx, lengh: 0x%04lx", address, len);
+//    W25_DBG("w25qxx_read - address: 0x%08lx, lengh: 0x%04lx", address, len);
 
     // Transmit buffer holding command and address
     uint8_t tx[4] = {

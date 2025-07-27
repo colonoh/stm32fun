@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include "audio_index.h"
 #include "w25qxx.h"
+#include <stdbool.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -56,6 +57,15 @@ TIM_HandleTypeDef htim2;
 W25QXX_HandleTypeDef w25qxx;
 uint8_t buf[256] = {0}; // Buffer for playing with w25qxx
 
+#define AUDIO_SAMPLE_RATE     16000
+#define AUDIO_BUFFER_SIZE     512  // 512 samples (1024 bytes if 16-bit)
+#define AUDIO_FLASH_OFFSET    0x000000  // start of audio clip
+#define AUDIO_NUM_SAMPLES (AUDIO_BUFFER_SIZE / 2)
+
+uint16_t audioBuffer[AUDIO_NUM_SAMPLES];
+volatile uint32_t audioFlashReadPtr = AUDIO_FLASH_OFFSET;
+volatile bool audioPlaybackFinished = false;
+uint8_t raw[AUDIO_BUFFER_SIZE];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -72,7 +82,8 @@ static void MX_TIM2_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 // Dump hex to serial console
-void dump_hex(char *header, uint32_t start, uint8_t *buf, uint32_t len) {
+void dump_hex(char *header, uint32_t start, uint8_t *buf, uint32_t len)
+{
     uint32_t i = 0;
 
     W25_DBG("%s\n", header);
@@ -93,10 +104,76 @@ void dump_hex(char *header, uint32_t start, uint8_t *buf, uint32_t len) {
     }
 }
 
-void HAL_DAC_ConvCpltCallbackCh1(DAC_HandleTypeDef* hdac) {
-    // Playback finished
-    printf("Done playing!\n\r");
-    BSP_LED_Off(LED_GREEN);
+
+void Audio_PlayFromFlash(void)
+{
+    audioFlashReadPtr = AUDIO_FLASH_OFFSET;
+    audioPlaybackFinished = false;
+
+    // Pre-fill both halves
+    w25qxx_read(&w25qxx, audioFlashReadPtr, raw, AUDIO_BUFFER_SIZE);
+    audioFlashReadPtr += AUDIO_BUFFER_SIZE;
+
+    // Convert from signed 16-bit PCM to DAC format (12-bit unsigned)
+    for (int i = 0; i < AUDIO_BUFFER_SIZE; i += 2)
+    {
+        int16_t sample = raw[i] | (raw[i + 1] << 8);  // little-endian
+        uint16_t dac_value = (uint16_t)((sample + 32768) >> 4);  // scale to 12-bit
+        audioBuffer[i / 2] = dac_value;
+    }
+
+    HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t*)audioBuffer, AUDIO_BUFFER_SIZE / 2, DAC_ALIGN_12B_R);
+    HAL_TIM_Base_Start(&htim2);  // DAC is triggered by TIM2
+    printf("Started DAC DMA and TIM2\r\n");
+//    dump_hex("Preload buffer", AUDIO_FLASH_OFFSET, (uint8_t *)audioBuffer, 64);
+}
+
+
+void HAL_DAC_ConvHalfCpltCallbackCh1(DAC_HandleTypeDef* hdac)
+{
+//    printf("Half callback\r\n");
+    if (audioPlaybackFinished) return;
+
+    if ((audioFlashReadPtr + AUDIO_BUFFER_SIZE / 2) >= w25qxx.block_count * w25qxx.block_size) {
+        audioPlaybackFinished = true;
+        return;
+    }
+
+    // Read next chunk from flash
+    w25qxx_read(&w25qxx, audioFlashReadPtr, raw, AUDIO_BUFFER_SIZE / 2);
+    audioFlashReadPtr += AUDIO_BUFFER_SIZE / 2;
+
+    // Convert and write to first half of audioBuffer
+    for (int i = 0; i < AUDIO_BUFFER_SIZE / 2; i += 2)
+    {
+        int16_t sample = raw[i] | (raw[i + 1] << 8);
+        uint16_t dac_value = (uint16_t)((sample + 32768) >> 4);
+        audioBuffer[i / 2] = dac_value;  // first half: index 0 to N/2 - 1
+    }
+}
+
+
+void HAL_DAC_ConvCpltCallbackCh1(DAC_HandleTypeDef* hdac)
+{
+//    printf("Full callback\r\n");
+    if (audioPlaybackFinished) return;
+
+    if ((audioFlashReadPtr + AUDIO_BUFFER_SIZE / 2) >= w25qxx.block_count * w25qxx.block_size) {
+        audioPlaybackFinished = true;
+        return;
+    }
+
+    // Read next chunk from flash
+    w25qxx_read(&w25qxx, audioFlashReadPtr, raw, AUDIO_BUFFER_SIZE / 2);
+    audioFlashReadPtr += AUDIO_BUFFER_SIZE / 2;
+
+    // Convert and write to second half of audioBuffer
+    for (int i = 0; i < AUDIO_BUFFER_SIZE / 2; i += 2)
+    {
+        int16_t sample = raw[i] | (raw[i + 1] << 8);
+        uint16_t dac_value = (uint16_t)((sample + 32768) >> 4);
+        audioBuffer[(i / 2) + (AUDIO_BUFFER_SIZE / 4)] = dac_value;  // second half
+    }
 }
 
 
@@ -136,7 +213,7 @@ int main(void)
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
   HAL_DAC_Start(&hdac1, DAC_CHANNEL_1);
-  HAL_TIM_Base_Start_IT(&htim2);  // start timer with interrupt
+//  HAL_TIM_Base_Start_IT(&htim2);  // start timer with interrupt TODO???
   /* USER CODE END 2 */
 
   /* Initialize leds */
@@ -167,7 +244,8 @@ int main(void)
   /* USER CODE BEGIN WHILE */
 
   W25_DBG("Attempting to initialize W25QXX");
-  if (w25qxx_init(&w25qxx, &hspi1, SPI1_CS_GPIO_Port, SPI1_CS_Pin) == W25QXX_Ok) {
+  if (w25qxx_init(&w25qxx, &hspi1, SPI1_CS_GPIO_Port, SPI1_CS_Pin) == W25QXX_Ok)
+  {
       W25_DBG("W25QXX successfully initialized");
       W25_DBG("Manufacturer       = 0x%2x", w25qxx.manufacturer_id);
       W25_DBG("Device             = 0x%4x", w25qxx.device_id);
@@ -178,26 +256,15 @@ int main(void)
 
   while (1)
   {
+      if (BspButtonState == BUTTON_PRESSED)
+      {
+          /* Update button state */
+          BspButtonState = BUTTON_RELEASED;
+          BSP_LED_Toggle(LED_GREEN);
+          printf("Play requested!\r\n");
+          Audio_PlayFromFlash();
 
-//    /* -- Sample board code for User push-button in interrupt mode ---- */
-//    if (BspButtonState == BUTTON_PRESSED)
-//    {
-//      /* Update button state */
-//      BspButtonState = BUTTON_RELEASED;
-//      /* -- Sample board code to toggle leds ---- */
-//      BSP_LED_Toggle(LED_GREEN);
-//      /* ..... Perform your action ..... */
-//
-//        W25_DBG("Reading first page");
-//          if (w25qxx_read(&w25qxx, 0, (uint8_t *)&buf, 256) == W25QXX_Ok) {
-//              //DBG("  - sum = %lu", get_sum(buf, 256));
-//              dump_hex("First page at start", 0, &buf, 256);
-//          }
-//          if (w25qxx_read(&w25qxx, 0x00022500, (uint8_t *)&buf, 256) == W25QXX_Ok) {
-//              //DBG("  - sum = %lu", get_sum(buf, 256));
-//              dump_hex("Last page at start", 0x00022500, &buf, 256);
-//          }
-//    }
+      }
 
     /* USER CODE END WHILE */
 
@@ -446,12 +513,7 @@ void BSP_PB_Callback(Button_TypeDef Button)
 {
   if (Button == BUTTON_USER)
   {
-//      HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t*)audio_clip_1, audio_clip_1_length, DAC_ALIGN_12B_R);
-      BSP_LED_On(LED_GREEN);
-
-      if (w25qxx_read(&w25qxx, audio_clips[0].start, (uint8_t *)&buf, 256) == W25QXX_Ok) {
-          dump_hex("Last page at start", audio_clips[0].start, &buf, 256);
-      }
+    BspButtonState = BUTTON_PRESSED;
   }
 }
 
