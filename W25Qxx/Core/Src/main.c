@@ -21,6 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "audio_index.h"
 #include "w25qxx.h"
 /* USER CODE END Includes */
 
@@ -44,7 +45,12 @@
 COM_InitTypeDef BspCOMInit;
 __IO uint32_t BspButtonState = BUTTON_RELEASED;
 
+DAC_HandleTypeDef hdac1;
+DMA_HandleTypeDef hdma_dac1_ch1;
+
 SPI_HandleTypeDef hspi1;
+
+TIM_HandleTypeDef htim2;
 
 /* USER CODE BEGIN PV */
 W25QXX_HandleTypeDef w25qxx;
@@ -55,7 +61,10 @@ uint8_t buf[256] = {0}; // Buffer for playing with w25qxx
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_SPI1_Init(void);
+static void MX_DAC1_Init(void);
+static void MX_TIM2_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -83,6 +92,13 @@ void dump_hex(char *header, uint32_t start, uint8_t *buf, uint32_t len) {
         ++start;
     }
 }
+
+void HAL_DAC_ConvCpltCallbackCh1(DAC_HandleTypeDef* hdac) {
+    // Playback finished
+    printf("Done playing!\n\r");
+    BSP_LED_Off(LED_GREEN);
+}
+
 
 /* USER CODE END 0 */
 
@@ -114,9 +130,13 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_SPI1_Init();
+  MX_DAC1_Init();
+  MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
-
+  HAL_DAC_Start(&hdac1, DAC_CHANNEL_1);
+  HAL_TIM_Base_Start_IT(&htim2);  // start timer with interrupt
   /* USER CODE END 2 */
 
   /* Initialize leds */
@@ -159,25 +179,25 @@ int main(void)
   while (1)
   {
 
-    /* -- Sample board code for User push-button in interrupt mode ---- */
-    if (BspButtonState == BUTTON_PRESSED)
-    {
-      /* Update button state */
-      BspButtonState = BUTTON_RELEASED;
-      /* -- Sample board code to toggle leds ---- */
-      BSP_LED_Toggle(LED_GREEN);
-      /* ..... Perform your action ..... */
-
-        W25_DBG("Reading first page");
-          if (w25qxx_read(&w25qxx, 0, (uint8_t *)&buf, 256) == W25QXX_Ok) {
-              //DBG("  - sum = %lu", get_sum(buf, 256));
-              dump_hex("First page at start", 0, &buf, 256);
-          }
-          if (w25qxx_read(&w25qxx, 0x00022500, (uint8_t *)&buf, 256) == W25QXX_Ok) {
-              //DBG("  - sum = %lu", get_sum(buf, 256));
-              dump_hex("Last page at start", 0x00022500, &buf, 256);
-          }
-    }
+//    /* -- Sample board code for User push-button in interrupt mode ---- */
+//    if (BspButtonState == BUTTON_PRESSED)
+//    {
+//      /* Update button state */
+//      BspButtonState = BUTTON_RELEASED;
+//      /* -- Sample board code to toggle leds ---- */
+//      BSP_LED_Toggle(LED_GREEN);
+//      /* ..... Perform your action ..... */
+//
+//        W25_DBG("Reading first page");
+//          if (w25qxx_read(&w25qxx, 0, (uint8_t *)&buf, 256) == W25QXX_Ok) {
+//              //DBG("  - sum = %lu", get_sum(buf, 256));
+//              dump_hex("First page at start", 0, &buf, 256);
+//          }
+//          if (w25qxx_read(&w25qxx, 0x00022500, (uint8_t *)&buf, 256) == W25QXX_Ok) {
+//              //DBG("  - sum = %lu", get_sum(buf, 256));
+//              dump_hex("Last page at start", 0x00022500, &buf, 256);
+//          }
+//    }
 
     /* USER CODE END WHILE */
 
@@ -226,6 +246,49 @@ void SystemClock_Config(void)
 }
 
 /**
+  * @brief DAC1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_DAC1_Init(void)
+{
+
+  /* USER CODE BEGIN DAC1_Init 0 */
+
+  /* USER CODE END DAC1_Init 0 */
+
+  DAC_ChannelConfTypeDef sConfig = {0};
+
+  /* USER CODE BEGIN DAC1_Init 1 */
+
+  /* USER CODE END DAC1_Init 1 */
+
+  /** DAC Initialization
+  */
+  hdac1.Instance = DAC1;
+  if (HAL_DAC_Init(&hdac1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** DAC channel OUT1 config
+  */
+  sConfig.DAC_SampleAndHold = DAC_SAMPLEANDHOLD_DISABLE;
+  sConfig.DAC_Trigger = DAC_TRIGGER_T2_TRGO;
+  sConfig.DAC_OutputBuffer = DAC_OUTPUTBUFFER_ENABLE;
+  sConfig.DAC_ConnectOnChipPeripheral = DAC_CHIPCONNECT_EXTERNAL;
+  sConfig.DAC_UserTrimming = DAC_TRIMMING_FACTORY;
+  if (HAL_DAC_ConfigChannel(&hdac1, &sConfig, DAC_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN DAC1_Init 2 */
+
+  /* USER CODE END DAC1_Init 2 */
+
+}
+
+/**
   * @brief SPI1 Initialization Function
   * @param None
   * @retval None
@@ -262,6 +325,67 @@ static void MX_SPI1_Init(void)
   /* USER CODE BEGIN SPI1_Init 2 */
 
   /* USER CODE END SPI1_Init 2 */
+
+}
+
+/**
+  * @brief TIM2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM2_Init(void)
+{
+
+  /* USER CODE BEGIN TIM2_Init 0 */
+
+  /* USER CODE END TIM2_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM2_Init 1 */
+
+  /* USER CODE END TIM2_Init 1 */
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 0;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.Period = 999;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM2_Init 2 */
+
+  /* USER CODE END TIM2_Init 2 */
+
+}
+
+/**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA1_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA1_Channel1_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
 
 }
 
@@ -322,7 +446,12 @@ void BSP_PB_Callback(Button_TypeDef Button)
 {
   if (Button == BUTTON_USER)
   {
-    BspButtonState = BUTTON_PRESSED;
+//      HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t*)audio_clip_1, audio_clip_1_length, DAC_ALIGN_12B_R);
+      BSP_LED_On(LED_GREEN);
+
+      if (w25qxx_read(&w25qxx, audio_clips[0].start, (uint8_t *)&buf, 256) == W25QXX_Ok) {
+          dump_hex("Last page at start", audio_clips[0].start, &buf, 256);
+      }
   }
 }
 
