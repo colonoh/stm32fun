@@ -61,6 +61,7 @@ uint8_t buf[256] = {0}; // Buffer for playing with w25qxx
 #define AUDIO_BUFFER_SIZE     512  // 512 samples (1024 bytes if 16-bit)
 #define AUDIO_FLASH_OFFSET    0x000000  // start of audio clip
 #define AUDIO_NUM_SAMPLES (AUDIO_BUFFER_SIZE / 2)
+#define AUDIO_VOLUME_FACTOR 0.1
 
 uint16_t audioBuffer[AUDIO_NUM_SAMPLES];
 volatile uint32_t audioFlashReadPtr = AUDIO_FLASH_OFFSET;
@@ -118,7 +119,8 @@ void Audio_PlayFromFlash(void)
     for (int i = 0; i < AUDIO_BUFFER_SIZE; i += 2)
     {
         int16_t sample = raw[i] | (raw[i + 1] << 8);  // little-endian
-        uint16_t dac_value = (uint16_t)((sample + 32768) >> 4);  // scale to 12-bit
+        sample *= AUDIO_VOLUME_FACTOR;
+        uint16_t dac_value = (uint16_t)((sample + 32768) >> 4);  // convert to unsigned 16-bit and also shift to 12-bit
         audioBuffer[i / 2] = dac_value;
     }
 
@@ -147,6 +149,7 @@ void HAL_DAC_ConvHalfCpltCallbackCh1(DAC_HandleTypeDef* hdac)
     for (int i = 0; i < AUDIO_BUFFER_SIZE / 2; i += 2)
     {
         int16_t sample = raw[i] | (raw[i + 1] << 8);
+        sample *= AUDIO_VOLUME_FACTOR;
         uint16_t dac_value = (uint16_t)((sample + 32768) >> 4);
         audioBuffer[i / 2] = dac_value;  // first half: index 0 to N/2 - 1
     }
@@ -171,6 +174,7 @@ void HAL_DAC_ConvCpltCallbackCh1(DAC_HandleTypeDef* hdac)
     for (int i = 0; i < AUDIO_BUFFER_SIZE / 2; i += 2)
     {
         int16_t sample = raw[i] | (raw[i + 1] << 8);
+        sample *= AUDIO_VOLUME_FACTOR;
         uint16_t dac_value = (uint16_t)((sample + 32768) >> 4);
         audioBuffer[(i / 2) + (AUDIO_BUFFER_SIZE / 4)] = dac_value;  // second half
     }
