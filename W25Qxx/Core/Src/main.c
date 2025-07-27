@@ -136,7 +136,7 @@ void HAL_DAC_ConvHalfCpltCallbackCh1(DAC_HandleTypeDef* hdac)
 //    printf("Half callback\r\n");
     if (audioPlaybackFinished) return;
 
-    if ((audioFlashReadPtr + AUDIO_BUFFER_SIZE / 2) >= w25qxx.block_count * w25qxx.block_size) {
+    if ((audioFlashReadPtr + AUDIO_BUFFER_SIZE / 2) >= audio_clips[0].length) {
         audioPlaybackFinished = true;
         return;
     }
@@ -161,7 +161,7 @@ void HAL_DAC_ConvCpltCallbackCh1(DAC_HandleTypeDef* hdac)
 //    printf("Full callback\r\n");
     if (audioPlaybackFinished) return;
 
-    if ((audioFlashReadPtr + AUDIO_BUFFER_SIZE / 2) >= w25qxx.block_count * w25qxx.block_size) {
+    if ((audioFlashReadPtr + AUDIO_BUFFER_SIZE / 2) >= audio_clips[0].length) {
         audioPlaybackFinished = true;
         return;
     }
@@ -268,6 +268,20 @@ int main(void)
           printf("Play requested!\r\n");
           Audio_PlayFromFlash();
 
+      }
+
+      if (audioPlaybackFinished)
+      {
+          audioPlaybackFinished = false;  // reset if needed
+
+          // Stop DAC + Timer to silence output
+          HAL_DAC_Stop_DMA(&hdac1, DAC_CHANNEL_1);
+          HAL_TIM_Base_Stop(&htim2);
+
+          printf("Audio playback complete.\r\n");
+
+          // Optional: enter sleep mode
+          // HAL_PWR_EnterSLEEPMode(PWR_MAINREGULATOR_ON, PWR_SLEEPENTRY_WFI);
       }
 
     /* USER CODE END WHILE */
@@ -420,7 +434,7 @@ static void MX_TIM2_Init(void)
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 0;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 999;
+  htim2.Init.Period = 1000;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
