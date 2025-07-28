@@ -59,14 +59,15 @@ uint8_t buf[256] = {0}; // Buffer for playing with w25qxx
 
 #define AUDIO_SAMPLE_RATE     16000
 #define AUDIO_BUFFER_SIZE     512  // 512 samples (1024 bytes if 16-bit)
-#define AUDIO_FLASH_OFFSET    0x000000  // start of audio clip
 #define AUDIO_NUM_SAMPLES (AUDIO_BUFFER_SIZE / 2)
-#define AUDIO_VOLUME_FACTOR 0.1
+#define AUDIO_VOLUME_FACTOR 0.2
 
 uint16_t audioBuffer[AUDIO_NUM_SAMPLES];
-volatile uint32_t audioFlashReadPtr = AUDIO_FLASH_OFFSET;
+volatile uint32_t audioFlashReadPtr = 0;  // to be replaced
 volatile bool audioPlaybackFinished = false;
 uint8_t raw[AUDIO_BUFFER_SIZE];
+uint8_t track_num = 22;
+volatile bool audioPlaying = false;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -108,9 +109,9 @@ void dump_hex(char *header, uint32_t start, uint8_t *buf, uint32_t len)
 
 void Audio_PlayFromFlash(void)
 {
-    audioFlashReadPtr = AUDIO_FLASH_OFFSET;
+    audioFlashReadPtr = audio_clips[track_num].start;
     audioPlaybackFinished = false;
-
+    audioPlaying = true;
     // Pre-fill both halves
     w25qxx_read(&w25qxx, audioFlashReadPtr, raw, AUDIO_BUFFER_SIZE);
     audioFlashReadPtr += AUDIO_BUFFER_SIZE;
@@ -126,17 +127,15 @@ void Audio_PlayFromFlash(void)
 
     HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t*)audioBuffer, AUDIO_BUFFER_SIZE / 2, DAC_ALIGN_12B_R);
     HAL_TIM_Base_Start(&htim2);  // DAC is triggered by TIM2
-    printf("Started DAC DMA and TIM2\r\n");
 //    dump_hex("Preload buffer", AUDIO_FLASH_OFFSET, (uint8_t *)audioBuffer, 64);
 }
 
 
 void HAL_DAC_ConvHalfCpltCallbackCh1(DAC_HandleTypeDef* hdac)
 {
-//    printf("Half callback\r\n");
     if (audioPlaybackFinished) return;
 
-    if ((audioFlashReadPtr + AUDIO_BUFFER_SIZE / 2) >= audio_clips[0].length) {
+    if ((audioFlashReadPtr + AUDIO_BUFFER_SIZE / 2) >= audio_clips[track_num].start + audio_clips[track_num].length) {
         audioPlaybackFinished = true;
         return;
     }
@@ -158,10 +157,9 @@ void HAL_DAC_ConvHalfCpltCallbackCh1(DAC_HandleTypeDef* hdac)
 
 void HAL_DAC_ConvCpltCallbackCh1(DAC_HandleTypeDef* hdac)
 {
-//    printf("Full callback\r\n");
     if (audioPlaybackFinished) return;
 
-    if ((audioFlashReadPtr + AUDIO_BUFFER_SIZE / 2) >= audio_clips[0].length) {
+    if ((audioFlashReadPtr + AUDIO_BUFFER_SIZE / 2) >= audio_clips[track_num].start + audio_clips[track_num].length) {
         audioPlaybackFinished = true;
         return;
     }
@@ -264,15 +262,25 @@ int main(void)
       {
           /* Update button state */
           BspButtonState = BUTTON_RELEASED;
-          BSP_LED_Toggle(LED_GREEN);
-          printf("Play requested!\r\n");
-          Audio_PlayFromFlash();
 
+          if(!audioPlaying)
+          {
+              BSP_LED_On(LED_GREEN);
+              printf("Playing track %u\r\n", track_num);
+              Audio_PlayFromFlash();
+          }
       }
 
       if (audioPlaybackFinished)
       {
           audioPlaybackFinished = false;  // reset if needed
+          audioPlaying = false;
+          BSP_LED_Off(LED_GREEN);
+          track_num += 1;
+          if(track_num >= AUDIO_CLIP_COUNT)
+          {
+              track_num = 0;
+          }
 
           // Stop DAC + Timer to silence output
           HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, 2048);
