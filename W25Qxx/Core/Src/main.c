@@ -275,9 +275,9 @@ int main(void)
           audioPlaybackFinished = false;  // reset if needed
 
           // Stop DAC + Timer to silence output
+          HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, 2048);
           HAL_DAC_Stop_DMA(&hdac1, DAC_CHANNEL_1);
           HAL_TIM_Base_Stop(&htim2);
-
           printf("Audio playback complete.\r\n");
 
           // Optional: enter sleep mode
