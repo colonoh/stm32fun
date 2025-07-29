@@ -21,6 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "audio_clip.h"
 
 /* USER CODE END Includes */
 
@@ -41,18 +42,22 @@
 
 /* Private variables ---------------------------------------------------------*/
 SAI_HandleTypeDef hsai_BlockA1;
+DMA_HandleTypeDef hdma_sai1_a;
 
 TIM_HandleTypeDef htim6;
 
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-
+extern const uint8_t audio_clip[];        // From your .h file
+extern const uint32_t audio_clip_len;
+volatile uint8_t playback_done = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_SAI1_Init(void);
 static void MX_TIM6_Init(void);
@@ -62,7 +67,14 @@ static void MX_TIM6_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+void HAL_SAI_TxCpltCallback(SAI_HandleTypeDef *hsai)
+{
+    if (hsai->Instance == SAI1_Block_A)
+    {
+        HAL_SAI_DMAStop(hsai);  // 🛑 Stops transfer
+        playback_done = 1;
+    }
+}
 /* USER CODE END 0 */
 
 /**
@@ -94,11 +106,12 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_USART2_UART_Init();
   MX_SAI1_Init();
   MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
-
+  HAL_SAI_Transmit_DMA(&hsai_BlockA1, (uint8_t*)audio_clip, audio_clip_len / 2);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -108,6 +121,10 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+      while (!playback_done)
+      {
+          HAL_Delay(10);  // or __WFI() for low-power wait
+      }
   }
   /* USER CODE END 3 */
 }
@@ -278,6 +295,22 @@ static void MX_USART2_UART_Init(void)
   /* USER CODE BEGIN USART2_Init 2 */
 
   /* USER CODE END USART2_Init 2 */
+
+}
+
+/**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA2_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA2_Channel1_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA2_Channel1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Channel1_IRQn);
 
 }
 
