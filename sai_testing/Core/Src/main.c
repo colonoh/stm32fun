@@ -32,6 +32,10 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define MONO_CHUNK_SAMPLES 256  // 256 mono samples = 512 bytes input
+#define STEREO_FRAME_BYTES (MONO_CHUNK_SAMPLES * 2 * 2)  // 2 bytes × 2 channels
+
+
 
 /* USER CODE END PD */
 
@@ -52,6 +56,13 @@ UART_HandleTypeDef huart2;
 extern const uint8_t audio_clip[];        // From your .h file
 extern const uint32_t audio_clip_len;
 volatile uint8_t playback_done = 0;
+
+uint8_t sai_tx_buffer_a[STEREO_FRAME_BYTES];
+uint8_t sai_tx_buffer_b[STEREO_FRAME_BYTES];
+uint8_t *current_tx_buf = sai_tx_buffer_a;
+uint8_t *next_tx_buf = sai_tx_buffer_b;
+uint32_t clip_pos = 0;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -67,14 +78,47 @@ static void MX_TIM6_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-void HAL_SAI_TxCpltCallback(SAI_HandleTypeDef *hsai)
+
+void fill_stereo_chunk(uint8_t *dst, const uint8_t *src, uint16_t samples)
 {
-    if (hsai->Instance == SAI1_Block_A)
-    {
-        HAL_SAI_DMAStop(hsai);  // 🛑 Stops transfer
-        playback_done = 1;
+    for (int i = 0; i < samples; i++) {
+        dst[4 * i + 0] = src[2 * i];       // LSB
+        dst[4 * i + 1] = src[2 * i + 1];   // MSB
+        dst[4 * i + 2] = src[2 * i];       // LSB again
+        dst[4 * i + 3] = src[2 * i + 1];   // MSB again
     }
 }
+
+//void HAL_SAI_TxCpltCallback(SAI_HandleTypeDef *hsai)
+//{
+//    if (hsai->Instance != SAI1_Block_A) return;
+//
+//    if (clip_pos >= audio_clip_len) {
+//        HAL_SAI_DMAStop(hsai);
+//        playback_done = 1;
+//        return;
+//    }
+//
+//    // Swap buffers
+//    uint8_t *temp = current_tx_buf;
+//    current_tx_buf = next_tx_buf;
+//    next_tx_buf = temp;
+//
+//    // Determine how many samples remain
+//    uint32_t remaining_bytes = audio_clip_len - clip_pos;
+//    uint16_t samples_to_copy = remaining_bytes / 2;
+//    if (samples_to_copy > MONO_CHUNK_SAMPLES) samples_to_copy = MONO_CHUNK_SAMPLES;
+//
+//    // Fill the buffer that will be played next
+//    fill_stereo_chunk(next_tx_buf, &audio_clip[clip_pos], samples_to_copy);
+//    clip_pos += samples_to_copy * 2;
+//
+//    // Launch DMA using the just-swapped buffer
+//    HAL_SAI_Transmit_DMA(hsai, current_tx_buf, samples_to_copy * 4);
+//}
+
+
+
 /* USER CODE END 0 */
 
 /**
@@ -111,6 +155,10 @@ int main(void)
   MX_SAI1_Init();
   MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
+//  HAL_SAI_Transmit_DMA(&hsai_BlockA1, (uint8_t*)audio_clip, audio_clip_len / 2);
+//  fill_stereo_chunk(current_tx_buf, &audio_clip[clip_pos], MONO_CHUNK_SAMPLES);
+//  clip_pos += MONO_CHUNK_SAMPLES * 2;
+
   HAL_SAI_Transmit_DMA(&hsai_BlockA1, (uint8_t*)audio_clip, audio_clip_len / 2);
   /* USER CODE END 2 */
 
@@ -212,7 +260,7 @@ static void MX_SAI1_Init(void)
   hsai_BlockA1.Init.FIFOThreshold = SAI_FIFOTHRESHOLD_EMPTY;
   hsai_BlockA1.Init.AudioFrequency = SAI_AUDIO_FREQUENCY_16K;
   hsai_BlockA1.Init.SynchroExt = SAI_SYNCEXT_DISABLE;
-  hsai_BlockA1.Init.MonoStereoMode = SAI_MONOMODE;
+  hsai_BlockA1.Init.MonoStereoMode = SAI_STEREOMODE;
   hsai_BlockA1.Init.CompandingMode = SAI_NOCOMPANDING;
   hsai_BlockA1.Init.TriState = SAI_OUTPUT_NOTRELEASED;
   if (HAL_SAI_InitProtocol(&hsai_BlockA1, SAI_I2S_STANDARD, SAI_PROTOCOL_DATASIZE_16BIT, 2) != HAL_OK)
