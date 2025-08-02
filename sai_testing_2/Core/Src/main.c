@@ -80,7 +80,6 @@ void HAL_SAI_TxHalfCpltCallback(SAI_HandleTypeDef *hsai) {
             dma_buffer[i] = 0;  // silence
         }
     }
-//    HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
 
 }
 
@@ -100,25 +99,8 @@ void HAL_SAI_TxCpltCallback(SAI_HandleTypeDef *hsai) {
             dma_buffer[i] = 0;
         }
     }
-//    HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
 
 }
-
-//int16_t square_wave_high = 10000;
-//int16_t square_wave_low  = -10000;
-//int16_t sample;
-//uint8_t buffer[4]; // 2 samples (left + right)
-//
-//void send_sample(int16_t value) {
-//    // interleave stereo: L, R
-//    buffer[0] = value & 0xFF;
-//    buffer[1] = (value >> 8) & 0xFF;
-//    buffer[2] = value & 0xFF;
-//    buffer[3] = (value >> 8) & 0xFF;
-//    HAL_SAI_Transmit(&hsai_BlockA1, buffer, sizeof(buffer), HAL_MAX_DELAY);
-//}
-
-
 
 /* USER CODE END 0 */
 
@@ -156,16 +138,12 @@ int main(void)
   MX_SAI1_Init();
   /* USER CODE BEGIN 2 */
 
-
-
   audio_offset = 0;
   HAL_SAI_Transmit_DMA(&hsai_BlockA1, (uint8_t*)dma_buffer, BUFFER_SIZE);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-//  int counter = 0;
-//  const int samples_per_half_period = 8; // 16kHz / (2 * 1kHz) = 8
 
   while (1)
   {
