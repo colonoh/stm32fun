@@ -33,7 +33,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define BUFFER_SIZE 512  // must be even and divisible by 4 (2 channels x 16-bit)
-
+#define VOLUME_MULT 1.0f
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -68,14 +68,21 @@ static void MX_SAI1_Init(void);
 /*
  * Given a start and end position in the DMA buffer, fill it with data from the audio clip array.
  * Probably would be either first half, second half, or full refill.
- * Each frame(?) is 4 bytes long
+ *
+ * Each stereo 16-bit frame(?) is 4 bytes long (2 bytes for left slot, 2 bytes for right)
  * if 16-bit audio data is: 00 01 02 03
- * each frame is: [left 16-bits: 0x0100, right 16-bits: 0x0302]
+ * each (little-endian order, hence 00 01 => 0100) frame is: [left slot 16-bits: 0x0100, right slot 16-bits: 0x0302]
  */
 void fill_buffer(uint32_t start, uint32_t end) {
     for (int i = start; i < end; ++i) {
         if (audio_offset + 1 < audio_end) {
-            dma_buffer[i] = (audio_clip[audio_offset + 1] << 8) | audio_clip[audio_offset];
+            uint8_t left_byte = audio_clip[audio_offset + 1];
+            uint8_t right_byte = audio_clip[audio_offset];
+            uint8_t left_byte_scaled = (uint8_t)left_byte*VOLUME_MULT;
+            uint8_t right_byte_scaled = (uint8_t)right_byte*VOLUME_MULT;
+            uint16_t both = (left_byte << 8) | right_byte;
+            uint16_t both_scaled = (left_byte_scaled << 8) | right_byte_scaled;
+            dma_buffer[i] = (left_byte_scaled << 8) | right_byte_scaled;
             audio_offset += 2;
         } else {
             dma_buffer[i] = 0;  // silence
