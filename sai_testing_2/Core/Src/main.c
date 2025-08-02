@@ -65,6 +65,13 @@ static void MX_SAI1_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+/*
+ * Given a start and end position in the DMA buffer, fill it with data from the audio clip array.
+ * Probably would be either first half, second half, or full refill.
+ * Each frame(?) is 4 bytes long
+ * if 16-bit audio data is: 00 01 02 03
+ * each frame is: [left 16-bits: 0x0100, right 16-bits: 0x0302]
+ */
 void fill_buffer(uint32_t start, uint32_t end) {
     for (int i = start; i < end; ++i) {
         if (audio_offset + 1 < audio_end) {
@@ -77,33 +84,28 @@ void fill_buffer(uint32_t start, uint32_t end) {
 }
 
 void HAL_SAI_TxHalfCpltCallback(SAI_HandleTypeDef *hsai) {
-    if (audio_offset >= audio_end) {
+    if (audio_offset >= audio_end) { // Done playing.
         HAL_SAI_DMAStop(hsai);
         HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_RESET);
         return;
     }
-    // Fill first half of buffer
-    fill_buffer(0, BUFFER_SIZE/2);
+    fill_buffer(0, BUFFER_SIZE/2); // Fill first half of the buffer
 }
 
 void HAL_SAI_TxCpltCallback(SAI_HandleTypeDef *hsai) {
-    if (audio_offset >= audio_end) {
-        // Done playing. Optionally stop SAI and DMA
+    if (audio_offset >= audio_end) { // Done playing.
         HAL_SAI_DMAStop(hsai);
         HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_RESET);
         return;
     }
-    // Fill second half of buffer
-    fill_buffer(BUFFER_SIZE/2, BUFFER_SIZE);
+    fill_buffer(BUFFER_SIZE/2, BUFFER_SIZE); // Fill second half of the buffer
 }
 
 void play_track(uint8_t track_num) {
-//    audio_offset = 0;
     audio_offset = audio_clips[track_num].start;
     audio_end = audio_offset + audio_clips[track_num].length;
 
-    // Fill the whole buffer
-    fill_buffer(0, BUFFER_SIZE);
+    fill_buffer(0, BUFFER_SIZE); // Fill the whole buffer
     HAL_Delay(10);
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_SET);
     HAL_SAI_Transmit_DMA(&hsai_BlockA1, (uint8_t*)dma_buffer, BUFFER_SIZE);
