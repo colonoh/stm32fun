@@ -22,6 +22,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "audio_clip.h"
+#include "audio_index.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -31,7 +32,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define AUDIO_BUF_SIZE 512  // Must be multiple of 4 (2 bytes per sample * 2 channels)
+#define BUFFER_SIZE 512  // must be even and divisible by 4 (2 channels x 16-bit)
 
 /* USER CODE END PD */
 
@@ -47,10 +48,9 @@ DMA_HandleTypeDef hdma_sai1_a;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-#define BUFFER_SIZE 512  // must be even and divisible by 4 (2 channels x 16-bit)
 uint16_t dma_buffer[BUFFER_SIZE];  // 16-bit stereo interleaved
 volatile uint32_t audio_offset = 0;
-
+uint32_t audio_end = 0;  //
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -65,42 +65,50 @@ static void MX_SAI1_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-void HAL_SAI_TxHalfCpltCallback(SAI_HandleTypeDef *hsai) {
-    if (audio_offset >= audio_clip_len) {
-        HAL_SAI_DMAStop(hsai);
-        return;
-    }
-
-    // Fill first half of buffer
-    for (int i = 0; i < BUFFER_SIZE/2; ++i) {
-        if (audio_offset + 1 < audio_clip_len) {
+void fill_buffer(uint32_t start, uint32_t end) {
+    for (int i = start; i < end; ++i) {
+        if (audio_offset + 1 < audio_end) {
             dma_buffer[i] = (audio_clip[audio_offset + 1] << 8) | audio_clip[audio_offset];
             audio_offset += 2;
         } else {
             dma_buffer[i] = 0;  // silence
         }
     }
+}
 
+void HAL_SAI_TxHalfCpltCallback(SAI_HandleTypeDef *hsai) {
+    if (audio_offset >= audio_end) {
+        HAL_SAI_DMAStop(hsai);
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_RESET);
+        return;
+    }
+    // Fill first half of buffer
+    fill_buffer(0, BUFFER_SIZE/2);
 }
 
 void HAL_SAI_TxCpltCallback(SAI_HandleTypeDef *hsai) {
-    if (audio_offset >= audio_clip_len) {
+    if (audio_offset >= audio_end) {
         // Done playing. Optionally stop SAI and DMA
         HAL_SAI_DMAStop(hsai);
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_RESET);
         return;
     }
-
     // Fill second half of buffer
-    for (int i = BUFFER_SIZE/2; i < BUFFER_SIZE; ++i) {
-        if (audio_offset + 1 < audio_clip_len) {
-            dma_buffer[i] = (audio_clip[audio_offset + 1] << 8) | audio_clip[audio_offset];
-            audio_offset += 2;
-        } else {
-            dma_buffer[i] = 0;
-        }
-    }
-
+    fill_buffer(BUFFER_SIZE/2, BUFFER_SIZE);
 }
+
+void play_track(uint8_t track_num) {
+//    audio_offset = 0;
+    audio_offset = audio_clips[track_num].start;
+    audio_end = audio_offset + audio_clips[track_num].length;
+
+    // Fill the whole buffer
+    fill_buffer(0, BUFFER_SIZE);
+    HAL_Delay(10);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_SET);
+    HAL_SAI_Transmit_DMA(&hsai_BlockA1, (uint8_t*)dma_buffer, BUFFER_SIZE);
+}
+
 
 /* USER CODE END 0 */
 
@@ -138,8 +146,12 @@ int main(void)
   MX_SAI1_Init();
   /* USER CODE BEGIN 2 */
 
-  audio_offset = 0;
-  HAL_SAI_Transmit_DMA(&hsai_BlockA1, (uint8_t*)dma_buffer, BUFFER_SIZE);
+  play_track(1);
+  HAL_Delay(3000);
+  play_track(0);
+  HAL_Delay(3000);
+  play_track(0); // doesn't work (only second seems to play)
+  play_track(1); // suspect it's immediately overwriting with the second call
   /* USER CODE END 2 */
 
   /* Infinite loop */
