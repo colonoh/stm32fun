@@ -22,7 +22,6 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "audio_clip.h"
-#include "audio_index.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -109,8 +108,8 @@ void HAL_SAI_TxCpltCallback(SAI_HandleTypeDef *hsai) {
 }
 
 void play_track(uint8_t track_num) {
-    audio_offset = audio_clips[track_num].start;
-    audio_end = audio_offset + audio_clips[track_num].length;
+    audio_offset = audio_index[track_num].start;
+    audio_end = audio_offset + audio_index[track_num].length;
 
     fill_buffer(0, BUFFER_SIZE); // Fill the whole buffer
     HAL_Delay(10);
