@@ -66,7 +66,10 @@ static void MX_SAI1_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 void HAL_SAI_TxHalfCpltCallback(SAI_HandleTypeDef *hsai) {
-    if (audio_offset >= audio_clip_len) return;
+    if (audio_offset >= audio_clip_len) {
+        HAL_SAI_DMAStop(hsai);
+        return;
+    }
 
     // Fill first half of buffer
     for (int i = 0; i < BUFFER_SIZE/2; ++i) {
@@ -77,7 +80,7 @@ void HAL_SAI_TxHalfCpltCallback(SAI_HandleTypeDef *hsai) {
             dma_buffer[i] = 0;  // silence
         }
     }
-    HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
+//    HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
 
 }
 
@@ -97,7 +100,7 @@ void HAL_SAI_TxCpltCallback(SAI_HandleTypeDef *hsai) {
             dma_buffer[i] = 0;
         }
     }
-    HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
+//    HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
 
 }
 
