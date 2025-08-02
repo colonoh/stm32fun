@@ -32,7 +32,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define BUFFER_SIZE 512  // must be even and divisible by 4 (2 channels x 16-bit)
-#define VOLUME_MULT 1.0f
+#define VOLUME_MULT 0.25f
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -68,20 +68,18 @@ static void MX_SAI1_Init(void);
  * Given a start and end position in the DMA buffer, fill it with data from the audio clip array.
  * Probably would be either first half, second half, or full refill.
  *
- * Each stereo 16-bit frame(?) is 4 bytes long (2 bytes for left slot, 2 bytes for right)
- * if 16-bit audio data is: 00 01 02 03
+ * Each stereo 32-bit frame(?) is 4 bytes long (2 bytes for left slot, 2 bytes for right)
+ * if 16-bit audio data is store as bytes: 0x00 0x01 0x02 0x03
  * each (little-endian order, hence 00 01 => 0100) frame is: [left slot 16-bits: 0x0100, right slot 16-bits: 0x0302]
  */
 void fill_buffer(uint32_t start, uint32_t end) {
+    // going through the audio data, 2 bytes as a time (therefore 1 slot at a time, so left, then right)
     for (int i = start; i < end; ++i) {
         if (audio_offset + 1 < audio_end) {
-            uint8_t left_byte = audio_clip[audio_offset + 1];
-            uint8_t right_byte = audio_clip[audio_offset];
-            uint8_t left_byte_scaled = (uint8_t)left_byte*VOLUME_MULT;
-            uint8_t right_byte_scaled = (uint8_t)right_byte*VOLUME_MULT;
-            uint16_t both = (left_byte << 8) | right_byte;
-            uint16_t both_scaled = (left_byte_scaled << 8) | right_byte_scaled;
-            dma_buffer[i] = (left_byte_scaled << 8) | right_byte_scaled;
+            uint8_t first_byte = audio_clip[audio_offset + 1];
+            uint8_t second_byte = audio_clip[audio_offset];
+            uint16_t sample = first_byte << 8 | second_byte;
+            dma_buffer[i] = (int16_t)sample*VOLUME_MULT; // do the multiplication as a signed int (cause that's what the data is)
             audio_offset += 2;
         } else {
             dma_buffer[i] = 0;  // silence
@@ -154,12 +152,7 @@ int main(void)
   MX_SAI1_Init();
   /* USER CODE BEGIN 2 */
 
-  play_track(1);
-  HAL_Delay(3000);
   play_track(0);
-  HAL_Delay(3000);
-  play_track(0); // doesn't work (only second seems to play)
-  play_track(1); // suspect it's immediately overwriting with the second call
   /* USER CODE END 2 */
 
   /* Infinite loop */
