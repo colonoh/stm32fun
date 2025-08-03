@@ -35,7 +35,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define BUFFER_SIZE 512  // must be even and divisible by 4 (2 channels x 16-bit)
-#define VOLUME_MULT 0.25f
+#define VOLUME_MULT 0.5f
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -79,7 +79,7 @@ static void MX_SPI1_Init(void);
  * Given a start and end position in the DMA buffer, fill it with data from the audio clip array.
  * Probably would be either first half, second half, or full refill.
  *
- * Each stereo 32-bit frame(?) is 4 bytes long (2 bytes for left slot, 2 bytes for right)
+ * Each stereo 32-bit frame is 4 bytes long (2 bytes for left slot, 2 bytes for right slot)
  * if 16-bit audio data is store as bytes: 0x00 0x01 0x02 0x03
  * each (little-endian order, hence 00 01 => 0100) frame is: [left slot 16-bits: 0x0100, right slot 16-bits: 0x0302]
  */
@@ -90,18 +90,7 @@ void fill_buffer(uint32_t start, uint32_t end) {
     // Pre-fill both halves
     uint32_t byte_len = (end - start) * 2;  // 2 bytes per sample
     w25qxx_read(&w25qxx, audio_offset, raw_buffer, byte_len);
-//    audioFlashReadPtr += AUDIO_BUFFER_SIZE;
 
-    // Convert from signed 16-bit PCM to DAC format (12-bit unsigned)
-//    for (int i = 0; i < AUDIO_BUFFER_SIZE; i += 2)
-//    {
-//        int16_t sample = raw[i] | (raw[i + 1] << 8);  // little-endian
-//        sample *= AUDIO_VOLUME_FACTOR;
-//        uint16_t dac_value = (uint16_t)((sample + 32768) >> 4);  // convert to unsigned 16-bit and also shift to 12-bit
-//        audioBuffer[i / 2] = dac_value;
-//    }
-
-//    HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t*)audioBuffer, AUDIO_BUFFER_SIZE / 2, DAC_ALIGN_12B_R);
 
     // going through the audio data, 2 bytes as a time (therefore 1 slot at a time, so left, then right)
     for (int i = start; i < end; ++i) {
@@ -186,9 +175,9 @@ int main(void)
   }
 
 
-  play_track(0);
-  HAL_Delay(5000);
-  play_track(20);
+  play_track(4);
+//  HAL_Delay(5000);
+//  play_track(20);
   /* USER CODE END 2 */
 
   /* Infinite loop */
