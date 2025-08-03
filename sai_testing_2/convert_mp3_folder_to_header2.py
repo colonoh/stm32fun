@@ -2,8 +2,8 @@ import os
 import subprocess
 import struct
 
-INPUT_FOLDER = "mp3_input"
-OUTPUT_BIN = "output_audio.bin"
+INPUT_FOLDER = "source"
+OUTPUT_BIN = "audio_data.bin"
 OUTPUT_HEADER = "audio_data.h"
 SAMPLE_RATE = 16000
 CHANNELS = 2

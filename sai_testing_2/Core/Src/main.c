@@ -22,6 +22,9 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "audio_clip.h"
+#include <stdbool.h>
+#include "w25qxx.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -32,7 +35,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define BUFFER_SIZE 512  // must be even and divisible by 4 (2 channels x 16-bit)
-#define VOLUME_MULT 0.25f
+#define VOLUME_MULT 1.0f
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -44,12 +47,19 @@
 SAI_HandleTypeDef hsai_BlockA1;
 DMA_HandleTypeDef hdma_sai1_a;
 
+SPI_HandleTypeDef hspi1;
+
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 uint16_t dma_buffer[BUFFER_SIZE];  // 16-bit stereo interleaved
+uint8_t raw_buffer[BUFFER_SIZE];  // for the data from the external memory
+
 volatile uint32_t audio_offset = 0;
 uint32_t audio_end = 0;  //
+
+W25QXX_HandleTypeDef w25qxx;
+//uint8_t buf[256] = {0}; // Buffer for playing with w25qxx
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -58,6 +68,7 @@ static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_SAI1_Init(void);
+static void MX_SPI1_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -73,11 +84,29 @@ static void MX_SAI1_Init(void);
  * each (little-endian order, hence 00 01 => 0100) frame is: [left slot 16-bits: 0x0100, right slot 16-bits: 0x0302]
  */
 void fill_buffer(uint32_t start, uint32_t end) {
+//    audioFlashReadPtr = audio_clips[track_num].start;
+//    audioPlaybackFinished = false;
+//    audioPlaying = true;
+    // Pre-fill both halves
+    w25qxx_read(&w25qxx, audio_offset, raw_buffer, end - start);
+//    audioFlashReadPtr += AUDIO_BUFFER_SIZE;
+
+    // Convert from signed 16-bit PCM to DAC format (12-bit unsigned)
+//    for (int i = 0; i < AUDIO_BUFFER_SIZE; i += 2)
+//    {
+//        int16_t sample = raw[i] | (raw[i + 1] << 8);  // little-endian
+//        sample *= AUDIO_VOLUME_FACTOR;
+//        uint16_t dac_value = (uint16_t)((sample + 32768) >> 4);  // convert to unsigned 16-bit and also shift to 12-bit
+//        audioBuffer[i / 2] = dac_value;
+//    }
+
+//    HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t*)audioBuffer, AUDIO_BUFFER_SIZE / 2, DAC_ALIGN_12B_R);
+
     // going through the audio data, 2 bytes as a time (therefore 1 slot at a time, so left, then right)
     for (int i = start; i < end; ++i) {
         if (audio_offset + 1 < audio_end) {
-            uint8_t first_byte = audio_clip[audio_offset + 1];
-            uint8_t second_byte = audio_clip[audio_offset];
+            uint8_t first_byte = raw_buffer[i + 1];
+            uint8_t second_byte = raw_buffer[i];
             uint16_t sample = first_byte << 8 | second_byte;
             dma_buffer[i] = (int16_t)sample*VOLUME_MULT; // do the multiplication as a signed int (cause that's what the data is)
             audio_offset += 2;
@@ -85,6 +114,7 @@ void fill_buffer(uint32_t start, uint32_t end) {
             dma_buffer[i] = 0;  // silence
         }
     }
+    printf("LOL");
 }
 
 void HAL_SAI_TxHalfCpltCallback(SAI_HandleTypeDef *hsai) {
@@ -106,8 +136,8 @@ void HAL_SAI_TxCpltCallback(SAI_HandleTypeDef *hsai) {
 }
 
 void play_track(uint8_t track_num) {
-    audio_offset = audio_index[track_num].start;
-    audio_end = audio_offset + audio_index[track_num].length;
+    audio_offset = audio_clips[track_num].start;
+    audio_end = audio_offset + audio_clips[track_num].length;
 
     fill_buffer(0, BUFFER_SIZE); // Fill the whole buffer
     HAL_Delay(10);
@@ -150,9 +180,17 @@ int main(void)
   MX_DMA_Init();
   MX_USART2_UART_Init();
   MX_SAI1_Init();
+  MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
 
+  if (w25qxx_init(&w25qxx, &hspi1, SPI1_CS_GPIO_Port, SPI1_CS_Pin) == W25QXX_Ok)
+  {
+  }
+
+
   play_track(0);
+//  HAL_Delay(5000);
+//  play_track(20);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -264,6 +302,46 @@ static void MX_SAI1_Init(void)
 }
 
 /**
+  * @brief SPI1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_SPI1_Init(void)
+{
+
+  /* USER CODE BEGIN SPI1_Init 0 */
+
+  /* USER CODE END SPI1_Init 0 */
+
+  /* USER CODE BEGIN SPI1_Init 1 */
+
+  /* USER CODE END SPI1_Init 1 */
+  /* SPI1 parameter configuration*/
+  hspi1.Instance = SPI1;
+  hspi1.Init.Mode = SPI_MODE_MASTER;
+  hspi1.Init.Direction = SPI_DIRECTION_2LINES;
+  hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
+  hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
+  hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
+  hspi1.Init.NSS = SPI_NSS_SOFT;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
+  hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
+  hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
+  hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+  hspi1.Init.CRCPolynomial = 7;
+  hspi1.Init.CRCLength = SPI_CRC_LENGTH_DATASIZE;
+  hspi1.Init.NSSPMode = SPI_NSS_PULSE_ENABLE;
+  if (HAL_SPI_Init(&hspi1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN SPI1_Init 2 */
+
+  /* USER CODE END SPI1_Init 2 */
+
+}
+
+/**
   * @brief USART2 Initialization Function
   * @param None
   * @retval None
@@ -332,7 +410,17 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(SPI1_CS_GPIO_Port, SPI1_CS_Pin, GPIO_PIN_SET);
+
+  /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin : SPI1_CS_Pin */
+  GPIO_InitStruct.Pin = SPI1_CS_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(SPI1_CS_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : LD3_Pin */
   GPIO_InitStruct.Pin = LD3_Pin;
