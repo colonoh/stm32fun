@@ -35,7 +35,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define BUFFER_SIZE 512  // must be even and divisible by 4 (2 channels x 16-bit)
-#define VOLUME_MULT 1.0f
+#define VOLUME_MULT 0.25f
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -53,7 +53,7 @@ UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 uint16_t dma_buffer[BUFFER_SIZE];  // 16-bit stereo interleaved
-uint8_t raw_buffer[BUFFER_SIZE];  // for the data from the external memory
+uint8_t raw_buffer[BUFFER_SIZE * 2];  // twice as big because its data type is half dma_buffer's
 
 volatile uint32_t audio_offset = 0;
 uint32_t audio_end = 0;  //
@@ -88,7 +88,8 @@ void fill_buffer(uint32_t start, uint32_t end) {
 //    audioPlaybackFinished = false;
 //    audioPlaying = true;
     // Pre-fill both halves
-    w25qxx_read(&w25qxx, audio_offset, raw_buffer, end - start);
+    uint32_t byte_len = (end - start) * 2;  // 2 bytes per sample
+    w25qxx_read(&w25qxx, audio_offset, raw_buffer, byte_len);
 //    audioFlashReadPtr += AUDIO_BUFFER_SIZE;
 
     // Convert from signed 16-bit PCM to DAC format (12-bit unsigned)
@@ -105,16 +106,13 @@ void fill_buffer(uint32_t start, uint32_t end) {
     // going through the audio data, 2 bytes as a time (therefore 1 slot at a time, so left, then right)
     for (int i = start; i < end; ++i) {
         if (audio_offset + 1 < audio_end) {
-            uint8_t first_byte = raw_buffer[i + 1];
-            uint8_t second_byte = raw_buffer[i];
-            uint16_t sample = first_byte << 8 | second_byte;
+            uint16_t sample = (raw_buffer[2*(i - start)+1] << 8 | raw_buffer[2*(i - start)]);
             dma_buffer[i] = (int16_t)sample*VOLUME_MULT; // do the multiplication as a signed int (cause that's what the data is)
             audio_offset += 2;
         } else {
             dma_buffer[i] = 0;  // silence
         }
     }
-    printf("LOL");
 }
 
 void HAL_SAI_TxHalfCpltCallback(SAI_HandleTypeDef *hsai) {
@@ -189,8 +187,8 @@ int main(void)
 
 
   play_track(0);
-//  HAL_Delay(5000);
-//  play_track(20);
+  HAL_Delay(5000);
+  play_track(20);
   /* USER CODE END 2 */
 
   /* Infinite loop */
