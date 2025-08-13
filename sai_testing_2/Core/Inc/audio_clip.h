@@ -8,16 +8,6 @@ typedef struct {
 } AudioClip;
 
 static const AudioClip audio_clips[AUDIO_CLIP_COUNT] = {
-  // Zareyoustillthere
-  { 0x000000, 107034 },
-  // Zcoffeeinmycoffeehole
-  { 0x01A21A, 160530 },
-  // Zgetmad
-  { 0x04152C, 78610 },
-  // Zi_like_your_style
-  { 0x05483E, 287590 },
-  // Zradio-cropped-2
-  { 0x09ABA4, 1412738 },
   // abcdelicious
   { 0x1F3A26, 281122 },
   // abcsingwithme
@@ -50,4 +40,15 @@ static const AudioClip audio_clips[AUDIO_CLIP_COUNT] = {
   { 0x6F9A02, 122914 },
   // thanksalatte
   { 0x717A24, 253474 },
+  // Zareyoustillthere
+  { 0x000000, 107034 },
+  // Zcoffeeinmycoffeehole
+  { 0x01A21A, 160530 },
+  // Zgetmad
+  { 0x04152C, 78610 },
+  // Zi_like_your_style
+  { 0x05483E, 287590 },
+  // Zradio-cropped-2
+  { 0x09ABA4, 1412738 },
+
 };

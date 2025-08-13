@@ -185,7 +185,7 @@ int main(void)
   {
   }
 
-  play_track(20);
+  play_track(16);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -457,9 +457,9 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     if((GPIO_Pin == BUTTON_1_Pin) || (GPIO_Pin == BUTTON_2_Pin)) {
         // a certain percentage of the time, do a special clip
         if(rand() % 100 <= COFFEE_HOLE_FRACTION) {
-            pending_track = 1;
+            pending_track = 17;
         } else {
-            pending_track = rand() % 20 + 5;  // play tracks 5-20
+            pending_track = rand() % 16;  // play tracks 0-15
         }
 
   } else {
