@@ -61,6 +61,7 @@ volatile uint32_t audio_offset = 0;
 uint32_t audio_end = 0;  //
 
 volatile int8_t pending_track = -1;
+int8_t last_track = -1;
 volatile bool audio_playing = false;
 
 W25QXX_HandleTypeDef w25qxx;
@@ -450,21 +451,26 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
-
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-    if(audio_playing) return;
-    if((GPIO_Pin == BUTTON_1_Pin) || (GPIO_Pin == BUTTON_2_Pin)) {
-        // a certain percentage of the time, do a special clip
-        if(rand() % 100 <= COFFEE_HOLE_FRACTION) {
-            pending_track = 17;
-        } else {
-            pending_track = rand() % 16;  // play tracks 0-15
-        }
+    if(audio_playing) return; // don't do this if a track is playing
 
-  } else {
-      __NOP();
-  }
+    if((GPIO_Pin == BUTTON_1_Pin) || (GPIO_Pin == BUTTON_2_Pin)) {
+        int8_t potential_track;
+        // find a new track but don't repeat the last track
+        do {
+            if(rand() % 100 <= COFFEE_HOLE_FRACTION) {
+                potential_track = 17;
+            } else {
+                potential_track = rand() % 16;  // play tracks 0-15
+            }
+        } while(potential_track == last_track);
+        pending_track = potential_track;
+        last_track = potential_track;
+
+    } else {
+        __NOP();
+    }
 }
 /* USER CODE END 4 */
 
