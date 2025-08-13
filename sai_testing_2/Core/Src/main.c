@@ -35,7 +35,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define BUFFER_SIZE 512  // must be even and divisible by 4 (2 channels x 16-bit)
-#define VOLUME_MULT 0.5f
+#define VOLUME_MULT 0.75f
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -57,6 +57,9 @@ uint8_t raw_buffer[BUFFER_SIZE * 2];  // twice as big because its data type is h
 
 volatile uint32_t audio_offset = 0;
 uint32_t audio_end = 0;  //
+
+volatile int8_t pending_track = -1;
+volatile bool audioPlaying = false;
 
 W25QXX_HandleTypeDef w25qxx;
 //uint8_t buf[256] = {0}; // Buffer for playing with w25qxx
@@ -107,7 +110,8 @@ void fill_buffer(uint32_t start, uint32_t end) {
 void HAL_SAI_TxHalfCpltCallback(SAI_HandleTypeDef *hsai) {
     if (audio_offset >= audio_end) { // Done playing.
         HAL_SAI_DMAStop(hsai);
-        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_RESET);
+        HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_RESET);
+        audioPlaying = false;
         return;
     }
     fill_buffer(0, BUFFER_SIZE/2); // Fill first half of the buffer
@@ -116,19 +120,24 @@ void HAL_SAI_TxHalfCpltCallback(SAI_HandleTypeDef *hsai) {
 void HAL_SAI_TxCpltCallback(SAI_HandleTypeDef *hsai) {
     if (audio_offset >= audio_end) { // Done playing.
         HAL_SAI_DMAStop(hsai);
-        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_RESET);
+        HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_RESET);
+        audioPlaying = false;
         return;
     }
     fill_buffer(BUFFER_SIZE/2, BUFFER_SIZE); // Fill second half of the buffer
 }
 
 void play_track(uint8_t track_num) {
+    if (audioPlaying) return;
+    audioPlaying = true;
+
+
     audio_offset = audio_clips[track_num].start;
     audio_end = audio_offset + audio_clips[track_num].length;
 
     fill_buffer(0, BUFFER_SIZE); // Fill the whole buffer
     HAL_Delay(10);
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_SET);
     HAL_SAI_Transmit_DMA(&hsai_BlockA1, (uint8_t*)dma_buffer, BUFFER_SIZE);
 }
 
@@ -175,7 +184,7 @@ int main(void)
   }
 
 
-  play_track(4);
+  play_track(1);
 //  HAL_Delay(5000);
 //  play_track(20);
   /* USER CODE END 2 */
@@ -188,6 +197,12 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    if (pending_track >= 0 && !audioPlaying) {
+      uint8_t t = pending_track;
+      pending_track = -1;
+      play_track(t);                // start outside ISR
+    }
+    __WFI();                          // sleep until next event
   }
   /* USER CODE END 3 */
 }
@@ -409,12 +424,25 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(SPI1_CS_GPIO_Port, &GPIO_InitStruct);
 
+  /*Configure GPIO pins : BUTTON_1_Pin BUTTON_2_Pin */
+  GPIO_InitStruct.Pin = BUTTON_1_Pin|BUTTON_2_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
   /*Configure GPIO pin : LD3_Pin */
   GPIO_InitStruct.Pin = LD3_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(LD3_GPIO_Port, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI0_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI0_IRQn);
+
+  HAL_NVIC_SetPriority(EXTI1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI1_IRQn);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
@@ -423,6 +451,19 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+  if(GPIO_Pin == BUTTON_1_Pin && !audioPlaying) {
+      pending_track = 1;
+  } else if (GPIO_Pin == BUTTON_2_Pin && !audioPlaying) {
+      pending_track = 2;
+  }
+  else
+  {
+      __NOP();
+  }
+}
 /* USER CODE END 4 */
 
 /**
