@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include "audio_clip.h"
 #include <stdbool.h>
+#include <stdlib.h>
 #include "w25qxx.h"
 
 /* USER CODE END Includes */
@@ -36,6 +37,7 @@
 /* USER CODE BEGIN PD */
 #define BUFFER_SIZE 512  // must be even and divisible by 4 (2 channels x 16-bit)
 #define VOLUME_MULT 0.75f
+#define COFFEE_HOLE_FRACTION 10 // 10% of the time, play the coffee hole clip
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -183,10 +185,7 @@ int main(void)
   {
   }
 
-
-  play_track(1);
-//  HAL_Delay(5000);
-//  play_track(20);
+  play_track(20);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -454,13 +453,16 @@ static void MX_GPIO_Init(void)
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-  if(GPIO_Pin == BUTTON_1_Pin && !audioPlaying) {
-      pending_track = 1;
-  } else if (GPIO_Pin == BUTTON_2_Pin && !audioPlaying) {
-      pending_track = 2;
-  }
-  else
-  {
+    if(audioPlaying) return;
+    if((GPIO_Pin == BUTTON_1_Pin) || (GPIO_Pin == BUTTON_2_Pin)) {
+        // a certain percentage of the time, do a special clip
+        if(rand() % 100 <= COFFEE_HOLE_FRACTION) {
+            pending_track = 1;
+        } else {
+            pending_track = rand() % 20 + 5;  // play tracks 5-20
+        }
+
+  } else {
       __NOP();
   }
 }
