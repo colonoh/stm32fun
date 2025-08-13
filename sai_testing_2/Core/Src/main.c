@@ -61,7 +61,7 @@ volatile uint32_t audio_offset = 0;
 uint32_t audio_end = 0;  //
 
 volatile int8_t pending_track = -1;
-volatile bool audioPlaying = false;
+volatile bool audio_playing = false;
 
 W25QXX_HandleTypeDef w25qxx;
 //uint8_t buf[256] = {0}; // Buffer for playing with w25qxx
@@ -91,7 +91,7 @@ static void MX_SPI1_Init(void);
 void fill_buffer(uint32_t start, uint32_t end) {
 //    audioFlashReadPtr = audio_clips[track_num].start;
 //    audioPlaybackFinished = false;
-//    audioPlaying = true;
+//    audio_playing = true;
     // Pre-fill both halves
     uint32_t byte_len = (end - start) * 2;  // 2 bytes per sample
     w25qxx_read(&w25qxx, audio_offset, raw_buffer, byte_len);
@@ -113,7 +113,7 @@ void HAL_SAI_TxHalfCpltCallback(SAI_HandleTypeDef *hsai) {
     if (audio_offset >= audio_end) { // Done playing.
         HAL_SAI_DMAStop(hsai);
         HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_RESET);
-        audioPlaying = false;
+        audio_playing = false;
         return;
     }
     fill_buffer(0, BUFFER_SIZE/2); // Fill first half of the buffer
@@ -123,15 +123,15 @@ void HAL_SAI_TxCpltCallback(SAI_HandleTypeDef *hsai) {
     if (audio_offset >= audio_end) { // Done playing.
         HAL_SAI_DMAStop(hsai);
         HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_RESET);
-        audioPlaying = false;
+        audio_playing = false;
         return;
     }
     fill_buffer(BUFFER_SIZE/2, BUFFER_SIZE); // Fill second half of the buffer
 }
 
 void play_track(uint8_t track_num) {
-    if (audioPlaying) return;
-    audioPlaying = true;
+    if (audio_playing) return;
+    audio_playing = true;
 
 
     audio_offset = audio_clips[track_num].start;
@@ -196,7 +196,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    if (pending_track >= 0 && !audioPlaying) {
+    if (pending_track >= 0 && !audio_playing) {
       uint8_t t = pending_track;
       pending_track = -1;
       play_track(t);                // start outside ISR
@@ -453,7 +453,7 @@ static void MX_GPIO_Init(void)
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-    if(audioPlaying) return;
+    if(audio_playing) return;
     if((GPIO_Pin == BUTTON_1_Pin) || (GPIO_Pin == BUTTON_2_Pin)) {
         // a certain percentage of the time, do a special clip
         if(rand() % 100 <= COFFEE_HOLE_FRACTION) {
