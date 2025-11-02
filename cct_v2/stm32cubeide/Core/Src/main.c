@@ -104,8 +104,9 @@ int main(void)
   while (1)
   {
       // new
-      // The size for HAL_I2S_Transmit is in 16-bit words,
+      // The size is in 16-bit words,
       // but our size variable is in 8-bit bytes, so divide by 2.
+      // https://community.st.com/t5/stm32-mcus-products/hal-sai-transmit-does-not-stop-the-i2s-clocks-when-complete/m-p/177117/highlight/true#M36926
       uint16_t audio_samples_count = g_nosoup_data_size / 2;
 
       // This function will block until the entire buffer is sent
