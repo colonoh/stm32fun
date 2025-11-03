@@ -40,6 +40,8 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+QSPI_HandleTypeDef hqspi;
+
 SAI_HandleTypeDef hsai_BlockA1;
 
 /* USER CODE BEGIN PV */
@@ -57,6 +59,7 @@ SAI_HandleTypeDef hsai_BlockA1;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_SAI1_Init(void);
+static void MX_QUADSPI_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -96,7 +99,59 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_SAI1_Init();
+  MX_QUADSPI_Init();
   /* USER CODE BEGIN 2 */
+
+    // This buffer will hold the 3-byte JEDEC ID
+    uint8_t jedec_id[3] = {0};
+
+    // This struct holds the command parameters
+    QSPI_CommandTypeDef sCommand;
+
+    // 1. Configure the JEDEC ID Read Command (0x9F)
+    sCommand.InstructionMode   = QSPI_INSTRUCTION_1_LINE;     // Command sent on 1 line
+    sCommand.Instruction       = 0x9F;                        // JEDEC ID command
+    sCommand.AddressMode       = QSPI_ADDRESS_NONE;           // No address needed
+    sCommand.AlternateByteMode = QSPI_ALTERNATE_BYTES_NONE;   // No alternate bytes
+    sCommand.DataMode          = QSPI_DATA_1_LINE;            // Data received on 1 line
+    sCommand.DummyCycles       = 0;                           // No dummy cycles
+    sCommand.NbData            = 3;                           // We expect 3 bytes back
+    sCommand.DdrMode           = QSPI_DDR_MODE_DISABLE;
+    sCommand.DdrHoldHalfCycle  = QSPI_DDR_HHC_ANALOG_DELAY;
+    sCommand.SIOOMode          = QSPI_SIOO_INST_EVERY_CMD;
+
+    // 2. Send the Command
+    if (HAL_QSPI_Command(&hqspi, &sCommand, HAL_QPSI_TIMEOUT_DEFAULT_VALUE) != HAL_OK)
+    {
+      Error_Handler();
+    }
+
+    // 3. Receive the Data
+    if (HAL_QSPI_Receive(&hqspi, jedec_id, HAL_QPSI_TIMEOUT_DEFAULT_VALUE) != HAL_OK)
+    {
+      Error_Handler();
+    }
+
+    // 4. Check the results!
+    //    jedec_id[0] should be 0xEF
+    //    jedec_id[1] should be 0x40
+    //    jedec_id[2] should be 0x18
+    //
+    //    You can place a breakpoint on the __NOP() line
+    //    and inspect the 'jedec_id' array in the debugger.
+
+    if (jedec_id[0] == 0xEF && jedec_id[1] == 0x40 && jedec_id[2] == 0x18)
+    {
+      // Success! Flash chip identified.
+      // You could toggle an LED here.
+      __NOP(); // Place breakpoint here
+    }
+    else
+    {
+      // Failure! Check wiring and CubeMX settings.
+      Error_Handler();
+    }
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -110,7 +165,9 @@ int main(void)
       uint16_t audio_samples_count = g_nosoup_data_size / 2;
 
       // This function will block until the entire buffer is sent
-      HAL_SAI_Transmit(&hsai_BlockA1, (uint8_t*)g_nosoup_data, audio_samples_count, HAL_MAX_DELAY);
+//      HAL_SAI_Transmit(&hsai_BlockA1, (uint8_t*)g_nosoup_data, audio_samples_count, HAL_MAX_DELAY);
+
+
 //      HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_SET);
 //      HAL_Delay(1000);
 //      HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_RESET);
@@ -178,6 +235,41 @@ void SystemClock_Config(void)
 }
 
 /**
+  * @brief QUADSPI Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_QUADSPI_Init(void)
+{
+
+  /* USER CODE BEGIN QUADSPI_Init 0 */
+
+  /* USER CODE END QUADSPI_Init 0 */
+
+  /* USER CODE BEGIN QUADSPI_Init 1 */
+
+  /* USER CODE END QUADSPI_Init 1 */
+  /* QUADSPI parameter configuration*/
+  hqspi.Instance = QUADSPI;
+  hqspi.Init.ClockPrescaler = 4;
+  hqspi.Init.FifoThreshold = 1;
+  hqspi.Init.SampleShifting = QSPI_SAMPLE_SHIFTING_HALFCYCLE;
+  hqspi.Init.FlashSize = 23;
+  hqspi.Init.ChipSelectHighTime = QSPI_CS_HIGH_TIME_1_CYCLE;
+  hqspi.Init.ClockMode = QSPI_CLOCK_MODE_0;
+  hqspi.Init.FlashID = QSPI_FLASH_ID_1;
+  hqspi.Init.DualFlash = QSPI_DUALFLASH_DISABLE;
+  if (HAL_QSPI_Init(&hqspi) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN QUADSPI_Init 2 */
+
+  /* USER CODE END QUADSPI_Init 2 */
+
+}
+
+/**
   * @brief SAI1 Initialization Function
   * @param None
   * @retval None
@@ -227,6 +319,7 @@ static void MX_GPIO_Init(void)
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_RESET);
