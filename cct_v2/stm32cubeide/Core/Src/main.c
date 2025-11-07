@@ -21,6 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <string.h>
 #include "my_audio_data.h"
 /* USER CODE END Includes */
 
@@ -67,6 +68,184 @@ static void MX_QUADSPI_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+// This handle is declared by CubeMX in main.c
+extern QSPI_HandleTypeDef hqspi;
+
+uint8_t QSPI_ReadStatusRegister(uint8_t reg_num)
+{
+  QSPI_CommandTypeDef sCommand;
+  uint8_t reg_val;
+  uint8_t instruction = 0x05; // Default to Read Status Reg 1
+
+  if (reg_num == 2) {
+    instruction = 0x35; // Read Status Reg 2
+  } else if (reg_num == 3) {
+    instruction = 0x15; // Read Status Reg 3
+  }
+
+  sCommand.InstructionMode   = QSPI_INSTRUCTION_1_LINE;
+  sCommand.Instruction       = instruction;
+  sCommand.AddressMode       = QSPI_ADDRESS_NONE;
+  sCommand.AlternateByteMode = QSPI_ALTERNATE_BYTES_NONE;
+  sCommand.DataMode          = QSPI_DATA_1_LINE;
+  sCommand.DummyCycles       = 0;
+  sCommand.NbData            = 1;
+  sCommand.DdrMode           = QSPI_DDR_MODE_DISABLE;
+  sCommand.DdrHoldHalfCycle  = QSPI_DDR_HHC_ANALOG_DELAY;
+  sCommand.SIOOMode          = QSPI_SIOO_INST_EVERY_CMD;
+
+  if (HAL_QSPI_Command(&hqspi, &sCommand, HAL_QPSI_TIMEOUT_DEFAULT_VALUE) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_QSPI_Receive(&hqspi, &reg_val, HAL_QPSI_TIMEOUT_DEFAULT_VALUE) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  return reg_val;
+}
+
+
+/**
+  * @brief  This function sends a Write Enable command (0x06)
+  */
+static void QSPI_WriteEnable(void)
+{
+  QSPI_CommandTypeDef sCommand;
+
+  sCommand.InstructionMode   = QSPI_INSTRUCTION_1_LINE;
+  sCommand.Instruction       = 0x06; // Write Enable
+  sCommand.AddressMode       = QSPI_ADDRESS_NONE;
+  sCommand.AlternateByteMode = QSPI_ALTERNATE_BYTES_NONE;
+  sCommand.DataMode          = QSPI_DATA_NONE;
+  sCommand.DummyCycles       = 0;
+  sCommand.DdrMode           = QSPI_DDR_MODE_DISABLE;
+  sCommand.DdrHoldHalfCycle  = QSPI_DDR_HHC_ANALOG_DELAY;
+  sCommand.SIOOMode          = QSPI_SIOO_INST_EVERY_CMD;
+
+  if (HAL_QSPI_Command(&hqspi, &sCommand, HAL_QPSI_TIMEOUT_DEFAULT_VALUE) != HAL_OK)
+  {
+    Error_Handler();
+  }
+}
+
+/**
+  * @brief  This function polls the flash's "Write in Progress" (WIP) bit.
+  * It will not return until the flash is ready for new commands.
+  */
+static void QSPI_AutoPoll_WIP(void)
+{
+  QSPI_CommandTypeDef sCommand;
+  QSPI_AutoPollingTypeDef sPoll;
+
+  // Configure the command to read Status Register 1 (0x05)
+  sCommand.InstructionMode   = QSPI_INSTRUCTION_1_LINE;
+  sCommand.Instruction       = 0x05; // Read Status Register 1
+  sCommand.AddressMode       = QSPI_ADDRESS_NONE;
+  sCommand.AlternateByteMode = QSPI_ALTERNATE_BYTES_NONE;
+  sCommand.DataMode          = QSPI_DATA_1_LINE;
+  sCommand.DummyCycles       = 0;
+  //... (other settings don't matter for this command)
+
+  // Configure the polling
+  sPoll.Mask           = 0x01; // Mask to check only the WIP bit (bit 0)
+  sPoll.Match          = 0x00; // We wait until the WIP bit is 0
+  sPoll.MatchMode      = QSPI_MATCH_MODE_AND;
+  sPoll.StatusBytesSize= 1;
+  sPoll.Interval       = 0x10;
+  sPoll.AutomaticStop  = QSPI_AUTOMATIC_STOP_ENABLE;
+
+  if (HAL_QSPI_AutoPolling(&hqspi, &sCommand, &sPoll, HAL_QPSI_TIMEOUT_DEFAULT_VALUE) != HAL_OK)
+  {
+    Error_Handler();
+  }
+}
+
+/**
+  * @brief  Erases a 4KB sector of the flash at a given address
+  */
+static void QSPI_SectorErase(uint32_t SectorAddress)
+{
+  QSPI_CommandTypeDef sCommand;
+
+  // 1. Send Write Enable
+  QSPI_WriteEnable();
+
+  // 2. Configure the Sector Erase command (0x20)
+  sCommand.InstructionMode   = QSPI_INSTRUCTION_1_LINE;
+  sCommand.Instruction       = 0x20; // Sector Erase
+  sCommand.AddressMode       = QSPI_ADDRESS_1_LINE;
+  sCommand.AddressSize       = QSPI_ADDRESS_24_BITS;
+  sCommand.Address           = SectorAddress;
+  sCommand.AlternateByteMode = QSPI_ALTERNATE_BYTES_NONE;
+  sCommand.DataMode          = QSPI_DATA_NONE;
+  sCommand.DummyCycles       = 0;
+  //... (other settings)
+
+  // 3. Send the command
+  if (HAL_QSPI_Command(&hqspi, &sCommand, HAL_QPSI_TIMEOUT_DEFAULT_VALUE) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  // 4. Wait for the erase to finish (can take ~45ms)
+  QSPI_AutoPoll_WIP();
+}
+
+// We'll need these helper functions from your previous test
+extern void QSPI_WriteEnable(void);
+extern void QSPI_AutoPoll_WIP(void);
+
+/**
+  * @brief  Enables Quad SPI mode on the W25Q128.
+  * It does this by setting the "QE" bit in Status Register 2.
+  */
+static void QSPI_EnableQuadMode(void)
+{
+    QSPI_CommandTypeDef sCommand;
+    uint8_t reg_data = 0x02; // 0x02 is the value to set the QE bit
+    uint8_t status_reg_1;
+
+    // 1. Send Write Enable
+    QSPI_WriteEnable();
+
+    // ----------------- DEBUG CHECK -----------------
+    // Read back Status Register 1 immediately
+    status_reg_1 = QSPI_ReadStatusRegister(1);
+
+    // The WEL bit (bit 1) MUST be set. The value should be 0x02.
+    // (Bit 0 is WIP, should be 0. Bit 1 is WEL, should be 1)
+    if (status_reg_1 != 0x02)
+    {
+      // If you land here, the Write Enable command FAILED.
+      // The chip ignored it. Check the reasons below.
+      Error_Handler();
+    }
+    // -----------------------------------------------
+
+    // 2. Configure the "Write Status Register 2" command (0x31)
+    sCommand.InstructionMode   = QSPI_INSTRUCTION_1_LINE;
+    sCommand.Instruction       = 0x31; // Write Status Register 2
+    // ... (rest of the command config) ...
+
+    if (HAL_QSPI_Command(&hqspi, &sCommand, HAL_QPSI_TIMEOUT_DEFAULT_VALUE) != HAL_OK)
+    {
+        Error_Handler();
+    }
+
+    // 3. Send the 0x02 byte
+    if (HAL_QSPI_Transmit(&hqspi, &reg_data, HAL_QPSI_TIMEOUT_DEFAULT_VALUE) != HAL_OK)
+    {
+    // This is where you are failing.
+        Error_Handler();
+    }
+
+    // 4. Wait for the write to finish
+    QSPI_AutoPoll_WIP();
+}
+
+
 /* USER CODE END 0 */
 
 /**
@@ -100,57 +279,143 @@ int main(void)
   MX_GPIO_Init();
   MX_SAI1_Init();
   MX_QUADSPI_Init();
+
+
   /* USER CODE BEGIN 2 */
 
-    // This buffer will hold the 3-byte JEDEC ID
-    uint8_t jedec_id[3] = {0};
+    uint8_t status;
 
-    // This struct holds the command parameters
-    QSPI_CommandTypeDef sCommand;
+    // 1. Check initial status
+    status = QSPI_ReadStatusRegister(1);
+    // Place breakpoint here: 'status' should be 0x00
 
-    // 1. Configure the JEDEC ID Read Command (0x9F)
-    sCommand.InstructionMode   = QSPI_INSTRUCTION_1_LINE;     // Command sent on 1 line
-    sCommand.Instruction       = 0x9F;                        // JEDEC ID command
-    sCommand.AddressMode       = QSPI_ADDRESS_NONE;           // No address needed
-    sCommand.AlternateByteMode = QSPI_ALTERNATE_BYTES_NONE;   // No alternate bytes
-    sCommand.DataMode          = QSPI_DATA_1_LINE;            // Data received on 1 line
-    sCommand.DummyCycles       = 0;                           // No dummy cycles
-    sCommand.NbData            = 3;                           // We expect 3 bytes back
-    sCommand.DdrMode           = QSPI_DDR_MODE_DISABLE;
-    sCommand.DdrHoldHalfCycle  = QSPI_DDR_HHC_ANALOG_DELAY;
-    sCommand.SIOOMode          = QSPI_SIOO_INST_EVERY_CMD;
+    // 2. Try to enable write
+    QSPI_WriteEnable();
 
-    // 2. Send the Command
-    if (HAL_QSPI_Command(&hqspi, &sCommand, HAL_QPSI_TIMEOUT_DEFAULT_VALUE) != HAL_OK)
-    {
-      Error_Handler();
-    }
-
-    // 3. Receive the Data
-    if (HAL_QSPI_Receive(&hqspi, jedec_id, HAL_QPSI_TIMEOUT_DEFAULT_VALUE) != HAL_OK)
-    {
-      Error_Handler();
-    }
-
-    // 4. Check the results!
-    //    jedec_id[0] should be 0xEF
-    //    jedec_id[1] should be 0x40
-    //    jedec_id[2] should be 0x18
+    // 3. Check if Write Enable Latch (WEL) bit is set
+    status = QSPI_ReadStatusRegister(1);
+    // Place breakpoint here: 'status' MUST be 0x02.
+    // The WEL bit (bit 1) must be 1.
     //
-    //    You can place a breakpoint on the __NOP() line
-    //    and inspect the 'jedec_id' array in the debugger.
+    // If 'status' is still 0x00, your Write Enable command failed.
+    // This confirms write protection (either HW pin or SW bits).
 
-    if (jedec_id[0] == 0xEF && jedec_id[1] == 0x40 && jedec_id[2] == 0x18)
+    if ((status & 0x02) == 0)
     {
-      // Success! Flash chip identified.
-      // You could toggle an LED here.
-      __NOP(); // Place breakpoint here
-    }
-    else
-    {
-      // Failure! Check wiring and CubeMX settings.
+      // WEL bit is NOT set. Write Enable failed.
+      // Most likely HW /WP pin is LOW or SW protection is on.
       Error_Handler();
     }
+
+//    // --- If you get here, Write Enable worked ---
+//
+//    // 4. Now, try to send the erase command (this is part of QSPI_SectorErase)
+//    QSPI_CommandTypeDef sEraseCommand;
+//    sEraseCommand.InstructionMode   = QSPI_INSTRUCTION_1_LINE;
+//    sEraseCommand.Instruction       = 0x20; // Sector Erase
+//    sEraseCommand.AddressMode       = QSPI_ADDRESS_1_LINE;
+//    sEraseCommand.AddressSize       = QSPI_ADDRESS_24_BITS;
+//    sEraseCommand.Address           = 0x000000; // The address you want to erase
+//    sEraseCommand.AlternateByteMode = QSPI_ALTERNATE_BYTES_NONE;
+//    sEraseCommand.DataMode          = QSPI_DATA_NONE;
+//    sEraseCommand.DummyCycles       = 0;
+//    //... (other settings)
+//
+//    if (HAL_QSPI_Command(&hqspi, &sEraseCommand, HAL_QPSI_TIMEOUT_DEFAULT_VALUE) != HAL_OK)
+//    {
+//      Error_Handler();
+//    }
+//
+//    // 5. Check if the Write in Progress (WIP) bit is now set
+//    status = QSPI_ReadStatusRegister(1);
+//    // Place breakpoint here: 'status' MUST be 0x01 or 0x03.
+//    // The WIP bit (bit 0) must be 1, showing the erase has started.
+//    // The WEL bit (bit 1) will be auto-cleared back to 0.
+//
+//    if ((status & 0x01) == 0)
+//    {
+//      // WIP bit is NOT set. The flash ignored the erase command.
+//      // This confirms write protection.
+//      Error_Handler();
+//    }
+//
+//    // 6. Now, try to poll for completion
+//    QSPI_AutoPoll_WIP();
+//
+//    // 7. Check if WIP bit is clear
+//    status = QSPI_ReadStatusRegister(1);
+//    // Place breakpoint here: 'status' should be 0x00.
+//    // This proves the erase finished and polling worked.
+//
+//    if (status != 0x00)
+//    {
+//      // Polling failed
+//      Error_Handler();
+//    }
+
+
+    QSPI_EnableQuadMode();
+
+
+      // --- Step 2: Configure and Enable Memory-Mapped Mode ---
+
+      QSPI_CommandTypeDef sCommand;
+      QSPI_MemoryMappedTypeDef sMemMappedCfg;
+
+      // Configure the "Fast Read Quad Output" command (0x6B)
+      // This is the command the QSPI hardware will auto-send
+      // when you read from 0x90000000.
+
+      sCommand.InstructionMode   = QSPI_INSTRUCTION_1_LINE;
+      sCommand.Instruction       = 0x6B;                      // Fast Read Quad Output
+      sCommand.AddressMode       = QSPI_ADDRESS_1_LINE;
+      sCommand.AddressSize       = QSPI_ADDRESS_24_BITS;    // 16MB chip = 24-bit address
+      sCommand.AlternateByteMode = QSPI_ALTERNATE_BYTES_NONE;
+      sCommand.DataMode          = QSPI_DATA_4_LINES;       // *** This is the "Quad" part! ***
+      sCommand.DummyCycles       = 8;                         // W25Q128 needs 8 dummies for 0x6B
+      sCommand.DdrMode           = QSPI_DDR_MODE_DISABLE;
+      sCommand.DdrHoldHalfCycle  = QSPI_DDR_HHC_ANALOG_DELAY;
+      sCommand.SIOOMode          = QSPI_SIOO_INST_EVERY_CMD;
+
+      // Configure the memory-mapped struct
+      sMemMappedCfg.TimeOutActivation = QSPI_TIMEOUT_COUNTER_DISABLE; // No timeout
+
+      // Enable memory-mapping!
+      if (HAL_QSPI_MemoryMapped(&hqspi, &sCommand, &sMemMappedCfg) != HAL_OK)
+      {
+        // Failed to enter memory-mapped mode
+        Error_Handler();
+      }
+
+      __NOP(); // Success breakpoint
+
+      volatile uint8_t* p_flash = (volatile uint8_t*)0x90000000;
+
+        uint8_t read_data[3];
+
+        // Read the data just like a normal array
+        // For each read, the QSPI hardware does the *full* 0x6B command
+        // automatically in the background.
+        read_data[0] = p_flash[0];
+        read_data[1] = p_flash[1];
+        read_data[2] = p_flash[2];
+
+
+        // --- Step 4: Check the results ---
+        if (read_data[0] == 0x00 && read_data[1] == 0x01 && read_data[2] == 0x02)
+        {
+          // Success!
+          __NOP(); // Place breakpoint here
+        }
+        else
+        {
+          // Failure!
+          // 1. Check your QE bit function.
+          // 2. Check your 0x6B command settings (especially DummyCycles).
+          // 3. Check your IO2 and IO3 wiring.
+          Error_Handler();
+        }
+
 
   /* USER CODE END 2 */
 
